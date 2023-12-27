@@ -6,6 +6,7 @@
 #include <list>
 #include <memory>
 #include <limits>
+#include <deque>
 
 template<typename T>
 using unique = std::unique_ptr<T>;
@@ -14,6 +15,7 @@ using std::vector;
 using std::list;
 using std::map;
 using std::set;
+using std::deque;
 
 struct ExprError{
 	string what;
@@ -63,7 +65,7 @@ using number_t = SafeFloat;
 struct ExprNode;
 
 struct Expr{
-	unique<ExprNode> node;
+	unique<ExprNode> node{};
 
 	ID type() const;
 
@@ -73,6 +75,10 @@ struct Expr{
 	string to_string(bool force_parentheses=false) const;
 	bool same_as(const Expr& b) const;
 
+	bool defined() const {
+		return node.get()!=nullptr;
+	}
+
 	//default value is 'undefined'
 	Expr(){};
 	Expr(const Expr& b);
@@ -80,11 +86,14 @@ struct Expr{
 	Expr(ExprNode* ptr):node(ptr){}
 	Expr(number_t num);
 	Expr(bool boo);
+
+	Expr& operator=(const Expr& b);
+	Expr& operator=(Expr&& b);
 };
 
 struct ExprNode{
 	const ID type;
-	list<Expr> subexprs;
+	deque<Expr> subexprs;
 
 	//direct simplification, as far as possible (ie, 2*2 => 4, 2*2*x => 4*x)
 	virtual Expr evaluate() const =0;
@@ -97,6 +106,24 @@ struct ExprNode{
 
 	ExprNode(ID type):type(type){}
 };
+
+
+
+/*
+
+operators by precedence:
+@ (index)
+# (call)
+^
+/
+*
+-
++
+= < > >= <=
+~ (not)
+& (and)
+| (or)
+ */
 
 #define SUBEXPR(EXPRTYPE) \
 inline static const ID type = #EXPRTYPE;\
@@ -148,13 +175,6 @@ struct Variable : public ExprNode{
 	SUBEXPR(Variable);
 };
 
-struct Function : public ExprNode{
-	vector<ID> inputs;
-	set<ID> find_vars() const override;
-
-	SUBEXPR(Function);
-};
-
 struct Array : public ExprNode{
 	SUBEXPR(Array);
 };
@@ -163,42 +183,79 @@ struct Tuple : public ExprNode{
 	SUBEXPR(Tuple);
 };
 
+//retrieves an index of the array/tuple on the left; ie (a @ b) == a[b]
+struct Index : public ExprNode{
+	SUBEXPR(Index);
+};
 
+//calls a function with args; eg f # x == f(x); if f takes multiple args, x should be a tuple
+//also serves as function composition, ie (f#g)#x == f(g(x))
+struct Call : public ExprNode{
+	SUBEXPR(Call);
+};
 
+//TODO
+struct Function : public ExprNode{
+	vector<ID> inputs;
+	set<ID> find_vars() const override;
+
+	SUBEXPR(Function);
+};
+
+//TODO
 struct And : public ExprNode{
 	SUBEXPR(And);
 };
 
+//TODO
 struct Or : public ExprNode{
 	SUBEXPR(Or);
 };
 
+//TODO
 struct Not : public ExprNode{
 	SUBEXPR(Not);
 };
 
-
-
-//disambiguates f times (...)  versus f of (...)
-struct Adjacent : public ExprNode{
-	SUBEXPR(Adjacent);
+//TODO
+struct Less : public ExprNode{
+	SUBEXPR(Less);
 };
 
+//TODO
+struct Greater : public ExprNode{
+	SUBEXPR(Greater);
+};
+
+//TODO
+struct LessEqual : public ExprNode{
+	SUBEXPR(LessEqual);
+};
+
+//TODO
+struct GreaterEqual : public ExprNode{
+	SUBEXPR(GreaterEqual);
+};
+
+//TODO
 // eg (x, where x > 3)
 struct Restricted : public ExprNode{
 	SUBEXPR(Restricted);
 };
 
+//TODO
 //a group of mutually exclusive 'Restricted's
 struct Piecewise : public ExprNode{
 	SUBEXPR(Piecewise);
 };
 
+//TODO
 struct Derivative : public ExprNode{
 	ID variable;
 	SUBEXPR(Derivative);
 };
 
+//TODO
 struct DefiniteIntegral : public ExprNode{
 	ID variable;
 	set<ID> find_vars() const override;
@@ -209,12 +266,15 @@ struct DefiniteIntegral : public ExprNode{
 
 
 
+//TODO
 struct Cosine : public ExprNode{
 	SUBEXPR(Cosine);
 };
+//TODO
 struct Sine : public ExprNode{
 	SUBEXPR(Sine);
 };
+//TODO
 struct Tangent : public ExprNode{
 	SUBEXPR(Tangent);
 };

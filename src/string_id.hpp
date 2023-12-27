@@ -99,7 +99,7 @@ class ID{
   }
 
 public:
-  const uint64_t id=0;
+  uint64_t id=0;
 
   ID():id(0){}
   ID(const char* ptr):id(hash(ptr,cstrlen(ptr))){}
@@ -108,6 +108,9 @@ public:
 
   operator const char*() const {
     return seen_map.at(id).ptr;
+  }
+  operator bool () const {
+    return id;
   }
 
 #define OPER(OP,TYPE)\
