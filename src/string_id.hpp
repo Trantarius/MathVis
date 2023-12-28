@@ -107,6 +107,9 @@ public:
   ID(const std::string& str):id(hash(str.c_str(),str.length())){}
 
   operator const char*() const {
+    if(id==0){
+      return "";
+    }
     return seen_map.at(id).ptr;
   }
   operator bool () const {

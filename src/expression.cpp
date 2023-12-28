@@ -1,18 +1,50 @@
 #include "expression.hpp"
 #include <cmath>
 
-ID Expr::type() const { return node->type; }
-Expr Expr::evaluate() const { return node->evaluate(); }
-set<ID> Expr::find_vars() const { return node->find_vars(); }
-Expr Expr::substitute(const map<ID,Expr>& context) const { return node->substitute(context); }
-string Expr::to_string(bool force_parentheses) const { return node->to_string(force_parentheses); }
-bool Expr::same_as(const Expr& b) const { return node->same_as(b); }
+ID Expr::type() const {
+	if(defined())
+		return node->type;
+	else
+		return ID();
+}
+Expr Expr::evaluate() const {
+	if(defined())
+		return node->evaluate();
+	else
+		return Expr();
+}
+set<ID> Expr::find_vars() const {
+	if(defined())
+		return node->find_vars();
+	else
+		return set<ID>();
+}
+Expr Expr::substitute(const map<ID,Expr>& context) const {
+	if(defined())
+		return node->substitute(context);
+	else
+		return Expr();
+}
+string Expr::to_string(bool force_parentheses) const {
+	if(defined())
+		return node->to_string(force_parentheses);
+	else
+		return "∅";
+}
+bool Expr::same_as(const Expr& b) const {
+	if(defined())
+		return node->same_as(b);
+	else
+		return false;
+}
 
 Expr::Expr(const Expr& b){
-	node=b.node->clone().node;
+	if(b.defined())
+		node=b.node->clone().node;
 }
 Expr::Expr(Expr&& b){
-	node=std::move(b.node);
+	if(b.defined())
+		node=std::move(b.node);
 }
 Expr::Expr(number_t num):node(new Number()){
 	Number* p = new Number();
@@ -27,18 +59,21 @@ Expr::Expr(bool boo):node(new Boolean()){
 }
 
 Expr& Expr::operator=(const Expr& b){
-	node=b.node->clone().node;
+	if(b.defined())
+		node=b.node->clone().node;
 	return *this;
 }
 
 Expr& Expr::operator=(Expr&& b){
-	node=std::move(b.node);
+	if(b.defined())
+		node=std::move(b.node);
 	return *this;
 }
 
 set<ID> ExprNode::find_vars() const {
 	set<ID> ret;
 	for(const Expr& child : subexprs){
+		if(!child.defined()) continue;
 		set<ID> cvars = child.find_vars();
 		for(ID id : cvars){
 			ret.emplace(id);
@@ -59,12 +94,17 @@ struct Operator{
 	Associativity associativity=NON_ASSOCIATIVE;
 	bool commutative=false;
 
-	static constexpr uint8_t NOTHING=0;
-	static constexpr uint8_t NUMBER=1<<1;
-	static constexpr uint8_t BOOLEAN=1<<2;
-	static constexpr uint8_t ARRAY=1<<3;
-	static constexpr uint8_t TUPLE=1<<4;
-	static constexpr uint8_t FUNCTION=1<<5;
+	static constexpr uint8_t NOTHING=1<<1;
+	static constexpr uint8_t NUMBER=1<<2;
+	static constexpr uint8_t BOOLEAN=1<<3;
+	static constexpr uint8_t ARRAY=1<<4;
+	static constexpr uint8_t TUPLE=1<<5;
+	static constexpr uint8_t FUNCTION=1<<6;
+
+	static constexpr uint8_t SCALAR=NUMBER|BOOLEAN|FUNCTION;
+	static constexpr uint8_t COLLECTION=ARRAY|TUPLE;
+	static constexpr uint8_t SOMETHING=SCALAR|COLLECTION;
+	static constexpr uint8_t ANYTHING=NOTHING|SOMETHING;
 
 	uint8_t left_argt{},right_argt{};
 
@@ -82,6 +122,7 @@ bool etype_is_value(ID type){
 }
 
 Expr binary_op(const Operator& op, const Expr& a, const Expr& b){
+
 	if(a.type()=="Array"_id){
 		if(!(op.left_argt&Operator::ARRAY)){
 
@@ -146,7 +187,12 @@ Expr binary_op(const Operator& op, const Expr& a, const Expr& b){
 		}
 	}
 
-	if(a.type()=="Number"_id){
+	if(!a.defined()){
+		if(!(op.left_argt&Operator::NOTHING)){
+			throw ExprError("operator "+string(op.name)+" cannot have nothing as left operand");
+		}
+	}
+	else if(a.type()=="Number"_id){
 		if(!(op.left_argt&Operator::NUMBER)){
 			throw ExprError("operator "+string(op.name)+" cannot have a number as left operand");
 		}
@@ -162,7 +208,12 @@ Expr binary_op(const Operator& op, const Expr& a, const Expr& b){
 		}
 	}
 
-	if(b.type()=="Number"_id){
+	if(!b.defined()){
+		if(!(op.right_argt&Operator::NOTHING)){
+			throw ExprError("operator "+string(op.name)+" cannot have nothing as right operand");
+		}
+	}
+	else if(b.type()=="Number"_id){
 		if(!(op.right_argt&Operator::NUMBER)){
 			throw ExprError("operator "+string(op.name)+" cannot have a number as right operand");
 		}
@@ -180,143 +231,6 @@ Expr binary_op(const Operator& op, const Expr& a, const Expr& b){
 
 	return op.do_op(a,b);
 }
-
-/*
-Expr binary_op(const Operator& op, const Expr& a, const Expr& b){
-	if(a.type()=="Number"_id){
-		if(b.type()=="Number"_id){
-
-			if(op.mode==Operator::NUMBER_TO_NUMBER){
-				Number* ret=new Number;
-				ret->value=op.number_to_number(
-					dynamic_cast<const Number*>(a.node.get())->value,
-					dynamic_cast<const Number*>(b.node.get())->value);
-				return ret;
-			}
-
-			else if(op.mode==Operator::NUMBER_TO_BOOL){
-				Boolean* ret=new Boolean;
-				ret->value=op.number_to_bool(
-					dynamic_cast<const Number*>(a.node.get())->value,
-					dynamic_cast<const Number*>(b.node.get())->value);
-				return ret;
-			}
-
-			else{
-				throw ExprError("cannot call operator '"+string(op.name)+"' on two numbers");
-			}
-		}
-
-		else if(b.type()=="Boolean"_id){
-			throw ExprError("cannot call operator '"+string(op.name)+"' on a number and a boolean");
-		}
-
-		else if(b.type()=="Array"_id){
-			Array* ret=new Array();
-			for(Expr& elem : b.node->subexprs){
-				ret->subexprs.push_back(binary_op(op,a,elem));
-			}
-			return ret;
-		}
-
-		else if(b.type()=="Tuple"_id){
-			throw ExprError(string("dimensionality mismatch: 1 vs ")+std::to_string(dynamic_cast<const Tuple*>(b.node.get())->subexprs.size()));
-		}
-	}
-
-	else if(a.type()=="Boolean"_id){
-		if(b.type()=="Number"_id){
-			throw ExprError("cannot call operator '"+string(op.name)+"' on a boolean and a number");
-		}
-
-		else if(b.type()=="Boolean"_id){
-
-			if(op.mode==Operator::BOOL_TO_BOOL){
-				Boolean* ret=new Boolean;
-				ret->value=op.number_to_bool(
-					dynamic_cast<const Boolean*>(a.node.get())->value,
-					dynamic_cast<const Boolean*>(b.node.get())->value);
-				return ret;
-			}
-
-			else{
-				throw ExprError("cannot call operator '"+string(op.name)+"' on two booleans");
-			}
-		}
-
-		if(b.type()=="Array"_id){
-			Array* ret=new Array();
-			for(Expr& elem : b.node->subexprs){
-				ret->subexprs.push_back(binary_op(op,a,elem));
-			}
-			return ret;
-		}
-
-		if(b.type()=="Tuple"_id){
-			throw ExprError(string("dimensionality mismatch: 1 vs ")+std::to_string(dynamic_cast<const Tuple*>(b.node.get())->subexprs.size()));
-		}
-	}
-
-	else if(a.type()=="Array"_id){
-
-		if(b.type()=="Array"_id){
-			Array* ret=new Array();
-			const Array* a_arr = dynamic_cast<const Array*>(a.node.get());
-			const Array* b_arr = dynamic_cast<const Array*>(b.node.get());
-			for(const Expr& elem_a : a_arr->subexprs){
-				for(const Expr& elem_b : b_arr->subexprs){
-					ret->subexprs.push_back(binary_op(op,elem_a,elem_b));
-				}
-			}
-			return ret;
-		}
-
-		else{
-			Array* ret=new Array();
-			Array* a_arr = dynamic_cast<Array*>(a.node.get());
-			for(Expr& elem : a_arr->subexprs){
-				ret->subexprs.push_back(binary_op(op,elem,b));
-			}
-			return ret;
-		}
-	}
-
-	else if(a.type()=="Tuple"_id){
-		if(b.type()=="Number"_id || b.type()=="Boolean"_id){
-			throw ExprError(string("dimensionality mismatch: 1 vs ")+std::to_string(dynamic_cast<Tuple*>(a.node.get())->subexprs.size()));
-		}
-
-		if(b.type()=="Array"_id){
-			Array* ret=new Array();
-			for(Expr& elem : b.node->subexprs){
-				ret->subexprs.push_back(binary_op(op,a,elem));
-			}
-			return ret;
-		}
-
-		if(b.type()=="Tuple"_id){
-			Tuple* a_tuple = dynamic_cast<Tuple*>(a.node.get());
-			Tuple* b_tuple = dynamic_cast<Tuple*>(a.node.get());
-			if(a_tuple->subexprs.size() != b_tuple->subexprs.size()){
-				throw ExprError(string("dimensionality mismatch: ") +
-					std::to_string(a_tuple->subexprs.size()) + " vs " +
-					std::to_string(b_tuple->subexprs.size()));
-			}
-			Tuple* ret=new Tuple();
-			auto it_a = a.node->subexprs.begin();
-			auto it_b = b.node->subexprs.begin();
-			while(it_a!=a.node->subexprs.end()){
-				ret->subexprs.push_back(binary_op(op,*it_a,*it_b));
-				it_a++;it_b++;
-			}
-			return ret;
-		}
-	}
-
-	//should be unreachable
-	return Expr();
-}
-*/
 
 // assumes left associative binary op sequence, ie a+b+c == (a+b)+c
 // does not assume associative or commutative properties
@@ -347,10 +261,10 @@ deque<Expr> nary_op(const Operator& op, deque<Expr>&& children){
 		if(children.empty()){
 			(alt.*push_alt)(std::move(a));
 		}
-		else if(etype_is_value(a.type())){
+		else if(!a.defined()||etype_is_value(a.type())){
 			Expr b = std::move((children.*next)());
 			(children.*pop)();
-			if(etype_is_value(b.type())){
+			if(!b.defined()||etype_is_value(b.type())){
 				(children.*push)( op.associativity==LEFT_ASSOCIATIVE ? binary_op(op,a,b) : binary_op(op,b,a) );
 			}
 			else{
@@ -370,7 +284,9 @@ deque<Expr> nary_op(const Operator& op, deque<Expr>&& children){
 	}
 
 	while(!children.empty()){
-
+		Expr tmp = std::move((children.*next)());
+		(children.*pop)();
+		(alt.*push_alt)(std::move(tmp));
 	}
 
 	return alt;
@@ -405,15 +321,15 @@ Expr EXPRNODE::evaluate() const {                               \
 
 #define BIOP_EXPR_EVAL(EXPRNODE,OPER)                           \
 Expr EXPRNODE::evaluate() const {                               \
-	assert(subexprs.size()==2);                                   \
+	if(subexprs.size()!=2) \
+		throw ExprError("operator "+string(OPER.name)+" is strictly binary"); \
 	EXPRNODE* ret=new EXPRNODE();                                 \
-	ret->subexprs=nary_op(OPER,sub_eval(subexprs));  \
-	if(etype_is_value(ret->subexprs.front().type()) && etype_is_value(ret->subexprs.back().type()) ){ \
+	ret->subexprs=sub_eval(subexprs);  \
+	if((!ret->subexprs.front().defined()||etype_is_value(ret->subexprs.front().type())) && (!ret->subexprs.back().defined()||etype_is_value(ret->subexprs.back().type())) ){ \
 		return binary_op(OPER,ret->subexprs.front(),ret->subexprs.back());      \
 	}else{ \
 		return ret; \
 	} \
-	return binary_op(OPER,subexprs.front(),subexprs.back());      \
 }
 
 #define SUBSTITUTE_IMPL(EXPRNODE)                                 \
@@ -516,14 +432,18 @@ constexpr Operator op_sub=[](){
 
 	op.associativity=LEFT_ASSOCIATIVE;
 	op.commutative=false;
-	op.left_argt=Operator::NUMBER;
+	op.left_argt=Operator::NUMBER|Operator::NOTHING;
 	op.right_argt=Operator::NUMBER;
 	op.name="-";
 	op.do_op=[](const Expr& a,const Expr& b)->Expr{
-		const Number* a_num = dynamic_cast<const Number*>(a.node.get());
-		const Number* b_num = dynamic_cast<const Number*>(b.node.get());
+		number_t a_num,b_num;
+		if(a.defined())
+			a_num = dynamic_cast<const Number*>(a.node.get())->value;
+		else
+			a_num=0;
+		b_num = dynamic_cast<const Number*>(b.node.get())->value;
 		Number* ret=new Number();
-		ret->value = a_num->value - b_num->value;
+		ret->value = a_num - b_num;
 		return ret;
 	};
 
@@ -683,7 +603,7 @@ constexpr Operator op_eql=[](){
 	op.do_op=[](const Expr& a,const Expr& b)->Expr{
 		const Number* a_num = dynamic_cast<const Number*>(a.node.get());
 		const Number* b_num = dynamic_cast<const Number*>(b.node.get());
-		Number* ret=new Number();
+		Boolean* ret=new Boolean();
 		ret->value = a_num->value == b_num->value;
 		return ret;
 	};
@@ -750,7 +670,7 @@ constexpr Operator op_call=[](){
 	op.associativity=ASSOCIATIVE;
 	op.commutative=false;
 	op.left_argt=Operator::FUNCTION;
-	op.right_argt=~Operator::NOTHING;
+	op.right_argt=Operator::SOMETHING;
 	op.name="#";
 	op.do_op=[](const Expr& a,const Expr& b)->Expr{
 		const Function* a_func = dynamic_cast<const Function*>(a.node.get());
@@ -872,7 +792,7 @@ bool Number::same_as(const Expr& b) const {
 	return dynamic_cast<const Number*>(b.node.get())->value==value;
 }
 string Number::to_string(bool force_parentheses) const {
-	return std::to_string(value);
+	return value;
 }
 
 

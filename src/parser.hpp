@@ -1,5 +1,7 @@
 #pragma once
+#include <string>
 #include "expression.hpp"
+using std::string;
 
 struct ParseFail{
 	string reason;

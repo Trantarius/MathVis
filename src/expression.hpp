@@ -7,6 +7,7 @@
 #include <memory>
 #include <limits>
 #include <deque>
+#include <cmath>
 
 template<typename T>
 using unique = std::unique_ptr<T>;
@@ -32,7 +33,7 @@ struct SafeFloat{
 	constexpr SafeFloat(long double n):value(n){}
 
 	bool operator==(const SafeFloat& b) const {
-		return (value>b.value ? value-b.value : b.value-value) < epsilon * std::max(value<0?-value:value,b.value<0?-b.value:b.value);
+		return fabsl(b.value-value) < epsilon * std::max(fabsl(value),fabsl(b.value));
 	}
 	bool operator!=(const SafeFloat& b) const{
 		return !(*this==b);
@@ -49,6 +50,17 @@ struct SafeFloat{
 	}
 	bool operator<=(const SafeFloat& b) const{
 		return value <= b || (*this==b);
+	}
+
+	operator string () const {
+		string dec = std::to_string(value);
+		while(dec.back()=='0'){
+			dec.pop_back();
+		}
+		if(dec.back()=='.'){
+			dec.pop_back();
+		}
+		return dec;
 	}
 
 #define OPER(OP)\

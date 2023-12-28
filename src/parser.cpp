@@ -1,4 +1,5 @@
 #include "parser.hpp"
+#include "expression.hpp"
 
 
 struct Token{
@@ -39,6 +40,10 @@ struct Token{
 	number_t num;
 };
 
+bool token_is_operator(Token t){
+	return t.type==Token::PLUS || t.type==Token::MINUS || t.type==Token::TIMES || t.type==Token::DIVIDE || t.type==Token::POWER || t.type==Token::NOT || t.type==Token::EQUAL || t.type==Token::AND || t.type==Token::OR || t.type==Token::LESS || t.type==Token::LESS_EQUAL || t.type==Token::GREATER || t.type==Token::GREATER_EQUAL || t.type==Token::INDEX || t.type==Token::CALL;
+}
+
 //may throw Parser::ParseFail if syntax is really bad
 list<Token> tokenize(string);
 using TokenIterator = list<Token>::const_iterator;
@@ -51,15 +56,19 @@ void seek_char(CharIterator& iter, const CharIterator& end, char target){
 			return;
 		}
 		if(*iter=='('){
+			iter++;
 			seek_char(iter,end,')');
 		}
 		else if(*iter=='['){
+			iter++;
 			seek_char(iter,end,']');
 		}
 		else if(*iter=='{'){
+			iter++;
 			seek_char(iter,end,'}');
 		}
-		iter++;
+		if(iter!=end)
+			iter++;
 	}
 }
 
@@ -102,7 +111,11 @@ list<Token> tokenize(string str){
 			else{
 				Token t;
 				t.type=Token::NUMBER;
-				t.num=std::stold(accum);
+				try{
+					t.num=std::stold(accum);
+				}catch(std::invalid_argument){
+					throw ParseFail("bad number syntax");
+				}
 				accum="";
 				is_making_number=false;
 				ret.push_back(t);
@@ -110,9 +123,23 @@ list<Token> tokenize(string str){
 			continue;
 		}
 
+		if(is_id_char(*iter)){
+			accum.push_back(*iter);
+			is_making_id=true;
+			iter++;
+			continue;
+		}
+
+		if(is_num_char(*iter)){
+			accum.push_back(*iter);
+			is_making_number=true;
+			iter++;
+			continue;
+		}
+
 		if(*iter=='('){
 			auto icpy = iter;
-			seek_char(icpy,str.end(),')');
+			seek_char(++icpy,str.end(),')');
 			if(icpy==str.end()){
 				throw ParseFail("unclosed parentheses");
 			}
@@ -132,7 +159,7 @@ list<Token> tokenize(string str){
 
 		if(*iter=='['){
 			auto icpy = iter;
-			seek_char(icpy,str.end(),']');
+			seek_char(++icpy,str.end(),']');
 			if(icpy==str.end()){
 				throw ParseFail("unclosed square brackets");
 			}
@@ -152,7 +179,7 @@ list<Token> tokenize(string str){
 
 		if(*iter=='{'){
 			auto icpy = iter;
-			seek_char(icpy,str.end(),'}');
+			seek_char(++icpy,str.end(),'}');
 			if(icpy==str.end()){
 				throw ParseFail("unclosed curly brackets");
 			}
@@ -240,7 +267,11 @@ list<Token> tokenize(string str){
 	if(is_making_number){
 		Token t;
 		t.type=Token::NUMBER;
-		t.num=std::stold(accum);
+		try{
+			t.num=std::stold(accum);
+		}catch(std::invalid_argument){
+			throw ParseFail("bad number syntax");
+		}
 		accum="";
 		is_making_number=false;
 		ret.push_back(t);
@@ -350,6 +381,9 @@ struct parse_op<NODE,OTHERS...>{
 			}
 			if(iter!=tokens.end()){
 				iter++;
+				if(iter==tokens.end()){
+					subexprs.push_back(Expr());
+				}
 			}
 		}
 
@@ -369,6 +403,8 @@ template<> struct parse_op<>{
 };
 
 Expr parse_tokens(const list<Token>& tokens){
+	if(tokens.empty())
+		return Expr();
 	return parse_op<Equal,Add,Sub,Mul,Div,Exponent,Call,Index>()(tokens);
 }
 
@@ -428,6 +464,7 @@ Expr parse_one(const Token& token){
 	else if(token.type==Token::NUMBER){
 		Number* num = new Number();
 		num->value = token.num;
+		return num;
 	}
 
 	throw ParseFail("syntax error");

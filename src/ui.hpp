@@ -31,6 +31,8 @@ public:
 	void set_idx(int);
 	int get_idx() const{ return idx; }
 
+	static void _on_text_changed(GtkTextBuffer*,gpointer);
+
 	operator GtkWidget*() const {return GTK_WIDGET(frame);}
 };
 
