@@ -965,7 +965,21 @@ Expr Function::evaluate() const{
 Expr Function::substitute(const map<ID,Expr>& context) const {
 	return clone();
 }
-SAME_AS_IMPL(Function)
+bool Function::same_as(const Expr& b) const{
+	if(b.type()!=type){
+		return false;
+	}
+	const Function* b_func=dynamic_cast<const Function*>(b.node.get());
+	if(inputs.size()!=b_func->inputs.size()){
+		return false;
+	}
+	for(int n=0;n<inputs.size();n++){
+		if(inputs[n]!=b_func->inputs[n]){
+			return false;
+		}
+	}
+	return subexprs.front().same_as(b_func->subexprs.front());
+}
 set<ID> Function::find_vars() const{
 	return set<ID>();
 }

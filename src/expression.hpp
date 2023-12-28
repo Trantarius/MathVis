@@ -194,7 +194,6 @@ struct Call : public ExprNode{
 	SUBEXPR(Call);
 };
 
-//TODO
 struct Function : public ExprNode{
 	vector<ID> inputs;
 	set<ID> find_vars() const override;
